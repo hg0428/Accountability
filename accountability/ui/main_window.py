@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QDialogButtonBox,
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSlot, QSize
+from PyQt6.QtCore import QTime, Qt, QDate, pyqtSlot, QSize
 from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap
 
 from accountability.utils.time_utils import format_hour_range
@@ -299,7 +299,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Override the close event to hide the window instead of closing."""
         event.ignore()  # Prevent the window from actually closing
-        self.hide()     # Hide the window
+        self.hide()  # Hide the window
 
     def load_stylesheet(self):
         """Load the application stylesheet."""
@@ -402,31 +402,33 @@ class MainWindow(QMainWindow):
         self.activity_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.activity_list.itemDoubleClicked.connect(self.on_item_double_clicked)
         middle_layout.addWidget(self.activity_list)
-        
+
         # Right panel - Daily Notes
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
-        
+
         # Notes header
         notes_header = QHBoxLayout()
-        
+
         notes_label = QLabel("Daily Notes & Reflections")
         notes_label.setObjectName("sectionTitle")
         notes_header.addWidget(notes_label)
-        
+
         # Save button
         self.save_notes_btn = QPushButton("Save Notes")
         self.save_notes_btn.setObjectName("successButton")
         self.save_notes_btn.clicked.connect(self.on_save_notes)
         notes_header.addWidget(self.save_notes_btn)
-        
+
         right_layout.addLayout(notes_header)
-        
+
         # Notes text editor
         self.notes_editor = QTextEdit()
-        self.notes_editor.setPlaceholderText("Write your thoughts, reflections, or notes about the day here...")
+        self.notes_editor.setPlaceholderText(
+            "Write your thoughts, reflections, or notes about the day here..."
+        )
         right_layout.addWidget(self.notes_editor)
 
         # Add panels to the content layout
@@ -568,7 +570,7 @@ class MainWindow(QMainWindow):
                     item.setData(Qt.ItemDataRole.UserRole + 1, "missed")
 
             self.activity_list.addItem(item)
-            
+
         # Load daily notes for the selected date
         daily_note = self.db.get_daily_note(day_start)
         self.notes_editor.setText(daily_note)
@@ -601,24 +603,27 @@ class MainWindow(QMainWindow):
         self.load_activities_for_selected_date()
 
     @pyqtSlot()
-    def on_edit_activity(self, item=None):
+    def on_edit_activity(self, item=None, hours=[], text=""):
         """Edit the selected activities."""
-        selected_items = [item] if item else self.activity_list.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "No Selection", "Please select hours to edit.")
-            return
+        if len(hours) == 0:
+            selected_items = [item] if item else self.activity_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(
+                    self, "No Selection", "Please select hours to edit."
+                )
+                return
 
-        # Get all selected hours
-        hours = [item.data(Qt.ItemDataRole.UserRole) for item in selected_items]
-        print(f"DEBUG: Selected hours: {hours}")
+            # Get all selected hours
+            hours = [item.data(Qt.ItemDataRole.UserRole) for item in selected_items]
+            print(f"DEBUG: Selected hours: {hours}")
 
-        text = (
-            selected_items[0].text().split(":", 3)[3].strip()
-        )  # Do the third one because it has two. The format is 11:00 AM - 12:00 PM: Activity.
-        for item in selected_items[1:]:
-            if item.text().split(":", 3)[3].strip() != text:
-                text = ""
-                break
+            text = (
+                selected_items[0].text().split(":", 3)[3].strip()
+            )  # Do the third one because it has two. The format is 11:00 AM - 12:00 PM: Activity.
+            for item in selected_items[1:]:
+                if item.text().split(":", 3)[3].strip() != text:
+                    text = ""
+                    break
 
         print(f"DEBUG: Extracted text: '{text}'")
 
@@ -637,6 +642,13 @@ class MainWindow(QMainWindow):
                 # Refresh the display
                 self.refresh_data()
                 print(f"DEBUG: Display refreshed")
+
+    @pyqtSlot()
+    def on_edit_current_activity(self):
+        """Edit the activity for the current hour."""
+        # get current datetime
+        now = datetime.now()
+        self.on_edit_activity(hours=[now])
 
     @pyqtSlot(QListWidgetItem)
     def on_item_double_clicked(self, item):
@@ -674,25 +686,25 @@ class MainWindow(QMainWindow):
     def on_save_notes(self):
         """Save the daily notes."""
         notes = self.notes_editor.toPlainText()
-        
+
         # Get the selected date
         qdate = self.calendar.selectedDate()
         date = datetime(qdate.year(), qdate.month(), qdate.day())
-        
+
         # Save to database
         success = self.db.save_daily_note(date, notes)
-        
+
         if success:
             QMessageBox.information(
                 self,
                 "Notes Saved",
                 "Your daily notes have been saved successfully.",
-                QMessageBox.StandardButton.Ok
+                QMessageBox.StandardButton.Ok,
             )
         else:
             QMessageBox.warning(
                 self,
                 "Save Error",
                 "There was an error saving your notes. Please try again.",
-                QMessageBox.StandardButton.Ok
+                QMessageBox.StandardButton.Ok,
             )

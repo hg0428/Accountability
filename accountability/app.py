@@ -213,7 +213,7 @@ class AccountabilityApp:
         self.open_action.triggered.connect(self.show_main_window)
 
         self.record_action = QAction("Record Activity", self.tray_menu)
-        self.record_action.triggered.connect(self.show_reminder)
+        self.record_action.triggered.connect(self.main_window.on_edit_current_activity)
 
         self.quit_action = QAction("Quit", self.tray_menu)
         self.quit_action.triggered.connect(self.quit)
