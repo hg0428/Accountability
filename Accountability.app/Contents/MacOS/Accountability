@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Get the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Go to the project root directory (two levels up from MacOS directory)
+cd "$DIR/../../.."
+
+# Set environment variables for menu bar only application
+export LSUIElement=1
+
+# Run the application with Python
+open -a "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app" --args main.py

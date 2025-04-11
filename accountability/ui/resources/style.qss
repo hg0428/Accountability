@@ -1,0 +1,363 @@
+/* Modern Style Sheet for Accountability App */
+
+/* Global Styles */
+* {
+    font-family: 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #333333;
+}
+
+QMainWindow, QDialog {
+    background-color: #f8f9fa;
+}
+
+/* Typography */
+QLabel {
+    color: #333333;
+}
+
+QLabel#appTitle {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+QLabel#sectionTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-top: 10px;
+    margin-bottom: 5px;
+}
+
+QLabel#subtitle {
+    font-size: 14px;
+    color: #5a6268;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: 500;
+    min-height: 36px;
+}
+
+QPushButton:hover {
+    background-color: #2980b9;
+}
+
+QPushButton:pressed {
+    background-color: #1c6ea4;
+}
+
+QPushButton:disabled {
+    background-color: #bdc3c7;
+    color: #7f8c8d;
+}
+
+QPushButton#secondaryButton {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #d6dbdf;
+}
+
+QPushButton#secondaryButton:pressed {
+    background-color: #bdc3c7;
+}
+
+QPushButton#dangerButton {
+    background-color: #e74c3c;
+}
+
+QPushButton#dangerButton:hover {
+    background-color: #c0392b;
+}
+
+QPushButton#successButton {
+    background-color: #2ecc71;
+}
+
+QPushButton#successButton:hover {
+    background-color: #27ae60;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    background-color: white;
+}
+
+QTabBar::tab {
+    background-color: #f1f2f6;
+    color: #5a6268;
+    border: 1px solid #dfe4ea;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 8px 16px;
+    min-width: 100px;
+    font-weight: 500;
+}
+
+QTabBar::tab:selected {
+    background-color: white;
+    color: #3498db;
+    border-bottom: 2px solid #3498db;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #e9ecef;
+}
+
+/* Calendar */
+QCalendarWidget {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+}
+
+QCalendarWidget QWidget {
+    alternate-background-color: #f8f9fa;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    color: #333333;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: #bdc3c7;
+}
+
+QCalendarWidget QMenu {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+}
+
+/* List Widget */
+QListWidget {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    padding: 4px;
+    alternate-background-color: #f8f9fa;
+}
+
+QListWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #f1f2f6;
+}
+
+QListWidget::item:selected {
+    background-color: #e1f0fa;
+    color: #2c3e50;
+    border-left: 3px solid #3498db;
+}
+
+QListWidget::item:hover:!selected {
+    background-color: #f1f2f6;
+}
+
+/* Text Edit */
+QTextEdit {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+QTextEdit:focus {
+    border: 1px solid #3498db;
+}
+
+/* Combo Box */
+QComboBox {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    padding: 8px;
+    min-height: 36px;
+}
+
+QComboBox:hover {
+    border: 1px solid #bdc3c7;
+}
+
+QComboBox:focus {
+    border: 1px solid #3498db;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
+    width: 20px;
+    border-left: 1px solid #dfe4ea;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    selection-background-color: #e1f0fa;
+    selection-color: #2c3e50;
+}
+
+/* Card Style */
+QFrame#card {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 8px;
+}
+
+/* Progress Bar */
+QProgressBar {
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    text-align: center;
+    background-color: #f8f9fa;
+    min-height: 20px;
+}
+
+QProgressBar::chunk {
+    background-color: #3498db;
+    width: 10px;
+    margin: 0.5px;
+}
+
+/* Splitter */
+QSplitter::handle {
+    background-color: #dfe4ea;
+    width: 1px;
+    height: 1px;
+    margin: 2px;
+}
+
+QSplitter::handle:hover {
+    background-color: #3498db;
+}
+
+/* Scroll Area */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background-color: #f1f2f6;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #bdc3c7;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #95a5a6;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #f1f2f6;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #bdc3c7;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #95a5a6;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* Group Box */
+QGroupBox {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 4px;
+    margin-top: 20px;
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
+    color: #2c3e50;
+}
+
+/* Frame */
+QFrame#card {
+    background-color: white;
+    border: 1px solid #dfe4ea;
+    border-radius: 8px;
+}
+
+/* Dialog */
+QDialog {
+    background-color: white;
+    border-radius: 8px;
+}
+
+/* Special Elements */
+#activityCard {
+    background-color: white;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 4px;
+    border-left: 4px solid #3498db;
+}
+
+#todayHighlight {
+    background-color: #e1f0fa;
+    font-weight: bold;
+    color: #2980b9;
+}
+
+#missedHour {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+#completedHour {
+    color: #2ecc71;
+}
+
+/* Calendar Day Format */
+#calendarWeekend {
+    color: #e74c3c;
+}
+
+#calendarCurrentDay {
+    background-color: #3498db;
+    color: white;
+    font-weight: bold;
+}
