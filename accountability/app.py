@@ -214,6 +214,10 @@ class AccountabilityApp:
 
         self.record_action = QAction("Record Activity", self.tray_menu)
         self.record_action.triggered.connect(self.main_window.on_edit_current_activity)
+        
+        # Add export action
+        self.export_action = QAction("Export Data", self.tray_menu)
+        self.export_action.triggered.connect(self.export_data)
 
         self.quit_action = QAction("Quit", self.tray_menu)
         self.quit_action.triggered.connect(self.quit)
@@ -221,6 +225,7 @@ class AccountabilityApp:
         # Add actions to menu
         self.tray_menu.addAction(self.open_action)
         self.tray_menu.addAction(self.record_action)
+        self.tray_menu.addAction(self.export_action)
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(self.quit_action)
 
@@ -259,3 +264,123 @@ class AccountabilityApp:
         self.db.close()
         self.tray_icon.hide()
         sys.exit(0)
+
+    def export_data(self):
+        """Export activity data to a file."""
+        # First show the main window in case it's hidden
+        self.show_main_window()
+        
+        # Import necessary modules
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import json
+        import os
+        from datetime import datetime, timedelta
+        
+        # Ask user for file location and format
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            None,
+            "Export Activity Data",
+            os.path.expanduser("~/activities_export.json"),
+            "JSON Files (*.json);;Text Files (*.txt);;All Files (*)",
+        )
+
+        if not file_path:
+            return  # User cancelled
+
+        try:
+            success = False
+
+            # Use the database's export methods if available
+            if hasattr(self.db, "export_activities_to_json") and hasattr(
+                self.db, "export_activities_to_text"
+            ):
+                if file_path.lower().endswith(".json"):
+                    success = self.db.export_activities_to_json(file_path)
+                else:
+                    success = self.db.export_activities_to_text(file_path)
+            else:
+                # Fallback to our own implementation
+                # Get all activities from the database
+                all_activities = []
+
+                # Get activities for the last year as a reasonable default
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=365)
+
+                current_date = start_date
+                while current_date <= end_date:
+                    day_start = datetime(
+                        current_date.year, current_date.month, current_date.day
+                    )
+                    day_activities = self.db.get_activities_for_day(day_start)
+                    all_activities.extend(day_activities)
+                    current_date += timedelta(days=1)
+
+                activities_to_export = all_activities
+                date_range = "Last Year"
+
+                # Format the activities for export
+                formatted_activities = []
+                for activity in activities_to_export:
+                    formatted_activities.append(
+                        {
+                            "date": activity["hour"].strftime("%Y-%m-%d"),
+                            "time": activity["hour"].strftime("%H:%M"),
+                            "activity": activity["activity"],
+                        }
+                    )
+
+                # Prepare the export data
+                export_data = {
+                    "date_range": date_range,
+                    "export_date": datetime.now().isoformat(),
+                    "activities": formatted_activities,
+                }
+
+                # Export based on file extension
+                if file_path.lower().endswith(".json"):
+                    # JSON export
+                    with open(file_path, "w") as f:
+                        json.dump(export_data, f, indent=2)
+                    success = True
+                else:
+                    # Text export
+                    with open(file_path, "w") as f:
+                        f.write(f"Activity Export - {date_range}\n")
+                        f.write(
+                            f"Exported on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                        )
+
+                        # Group by date
+                        activities_by_date = {}
+                        for activity in formatted_activities:
+                            date = activity["date"]
+                            if date not in activities_by_date:
+                                activities_by_date[date] = []
+                            activities_by_date[date].append(activity)
+
+                        # Write each date's activities
+                        for date, activities in sorted(activities_by_date.items()):
+                            f.write(f"=== {date} ===\n")
+                            for activity in sorted(activities, key=lambda x: x["time"]):
+                                f.write(f"{activity['time']}: {activity['activity']}\n")
+                            f.write("\n")
+                    success = True
+
+            if success:
+                QMessageBox.information(
+                    None,
+                    "Export Successful",
+                    f"Successfully exported activities to {file_path}",
+                )
+            else:
+                QMessageBox.warning(
+                    None,
+                    "Export Warning",
+                    f"The export may not have completed successfully. Please check the file at {file_path}",
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                None, "Export Error", f"An error occurred during export: {str(e)}"
+            )

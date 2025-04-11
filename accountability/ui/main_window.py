@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QDialog,
     QScrollArea,
+    QGroupBox,
 )
 from PyQt6.QtCore import QTime, Qt, QDate, pyqtSlot, QSize
 from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap
@@ -227,14 +228,13 @@ class DailySummaryWidget(QWidget):
 
         content_layout.addWidget(activities_frame)
 
-        # Productivity score section
         score_frame = QFrame()
         score_frame.setObjectName("card")
         score_layout = QVBoxLayout(score_frame)
         score_layout.setContentsMargins(16, 16, 16, 16)
         score_layout.setSpacing(10)
 
-        score_title = QLabel("Productivity Score")
+        score_title = QLabel("Logging Consistency")
         score_title.setObjectName("sectionTitle")
         score_layout.addWidget(score_title)
 
@@ -678,11 +678,17 @@ class MainWindow(QMainWindow):
         content_frame = QFrame()
         content_frame.setObjectName("card")
         content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(24, 24, 24, 24)
-        content_layout.setSpacing(16)
+
+        # Create AI analyzer instance
+        from ..ai_analysis import AIAnalyzer
+
+        db_path = None
+        if hasattr(self.db, "db_path"):
+            db_path = self.db.db_path
+        analyzer = AIAnalyzer(db_path=db_path)
 
         # Create analysis widget
-        self.analysis_widget = AnalysisWidget(self.db)
+        self.analysis_widget = AnalysisWidget(self.db, analyzer, self)
         content_layout.addWidget(self.analysis_widget)
 
         analysis_layout.addWidget(content_frame)

@@ -3,30 +3,38 @@ Analysis Widget for Accountability App.
 Provides AI-powered analysis of user activities and patterns.
 """
 
-from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QTextEdit,
     QComboBox,
     QFrame,
-    QProgressBar,
-    QSplitter,
     QScrollArea,
+    QSizePolicy,
+    QTextEdit,
+    QSpacerItem,
+    QProgressBar,
+    QStackedWidget,
     QMessageBox,
     QFileDialog,
     QCalendarWidget,
+    QGraphicsView,
+    QGraphicsScene,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QDate
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QDate, QRectF, QPointF
+from PyQt6.QtGui import QFont, QIcon, QPainterPath, QPainter, QBrush, QPen, QColor
+from math import pi, cos, sin
 
 from ..ai_analysis import AIAnalyzer
 import os
 import json
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List, Tuple
 
+logger = logging.getLogger(__name__)
 
 class AnalysisWorker(QThread):
     """Worker thread for running AI analysis without blocking the UI."""
@@ -95,212 +103,169 @@ class AnalysisWorker(QThread):
 class AnalysisWidget(QWidget):
     """Widget for displaying AI analysis of user activities."""
 
-    def __init__(self, database, parent=None):
+    def __init__(self, database, analyzer, parent=None):
         """Initialize the analysis widget."""
         super().__init__(parent)
-
-        self.db = database
-
-        # Get the database path from the main database
-        db_path = None
-        if hasattr(self.db, "db_path"):
-            db_path = self.db.db_path
-
-        self.analyzer = AIAnalyzer(db_path=db_path)
-        self.current_analysis = None
-        self.worker = None
-        self.current_activities = []
+        self.activities_db = database
+        self.analyzer = analyzer
+        self.analysis_in_progress = False
         self.current_date_range = "Today"
+        self.setup_ui()
 
-        # Auto-load the last analysis on startup
-        self.auto_load_last_analysis = True
-
-        self.init_ui()
-
-        # Auto-load the last analysis if enabled
-        if self.auto_load_last_analysis:
-            self.start_analysis(force_reload=False)
-
-    def init_ui(self):
-        """Set up the user interface."""
+    def setup_ui(self):
+        """Set up the UI elements."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
 
-        # Create a scroll area for the entire content
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        # Create a widget to hold all the scrollable content
-        scroll_content = QWidget()
-        layout = QVBoxLayout(scroll_content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
-
-        # Title and controls section
-        header_frame = QFrame()
-        header_frame.setObjectName("card")
-        header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(16, 16, 16, 16)
-        header_layout.setSpacing(16)
-        
-        # Title
-        title = QLabel("AI Activity Analysis")
-        title.setObjectName("appTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(title)
-
-        # Controls section
-        controls_frame = QFrame()
-        controls_layout = QHBoxLayout(controls_frame)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(12)
+        # Top controls
+        controls_layout = QHBoxLayout()
+        controls_layout.setContentsMargins(16, 16, 16, 0)
 
         # Date range selector
-        date_label = QLabel("Time Period:")
-        date_label.setObjectName("sectionTitle")
-        controls_layout.addWidget(date_label)
-
-        self.date_combo = QComboBox()
-        self.date_combo.addItems(
-            ["Today", "Yesterday", "This Week", "Last Week", "Last Month", "Custom Range"]
+        date_range_label = QLabel("Date Range:")
+        self.date_range_combo = QComboBox()
+        self.date_range_combo.addItems(
+            [
+                "Today",
+                "Yesterday",
+                "This Week",
+                "Last Week",
+                "This Month",
+                "Last Month",
+                "Custom Range",
+            ]
         )
-        self.date_combo.setMinimumWidth(150)
-        controls_layout.addWidget(self.date_combo)
+        self.date_range_combo.currentIndexChanged.connect(self.on_date_range_changed)
 
-        # API selector
-        api_label = QLabel("AI Model:")
-        api_label.setObjectName("sectionTitle")
-        controls_layout.addWidget(api_label)
+        # Custom date range controls (initially hidden)
+        self.date_range_frame = QFrame()
+        self.date_range_frame.setVisible(False)
+        date_range_frame_layout = QVBoxLayout(self.date_range_frame)
+        date_range_frame_layout.setContentsMargins(0, 8, 0, 8)
 
-        self.api_combo = QComboBox()
-        self.api_combo.addItems(["OpenAI", "Ollama (Local)"])
-        controls_layout.addWidget(self.api_combo)
+        # Start and end date selectors
+        date_selectors_layout = QHBoxLayout()
 
-        # Analyze button
-        self.analyze_button = QPushButton("Analyze")
-        self.analyze_button.setObjectName("primaryButton")
-        self.analyze_button.clicked.connect(self.force_reload_analysis)
-        controls_layout.addWidget(self.analyze_button)
-
-        # Export button
-        export_button = QPushButton("Export Data")
-        export_button.setObjectName("secondaryButton")
-        export_button.clicked.connect(self.export_data)
-        controls_layout.addWidget(export_button)
-
-        header_layout.addWidget(controls_frame)
-        layout.addWidget(header_frame)
-
-        # Date range picker (initially hidden)
-        self.date_range_container = QFrame()
-        self.date_range_container.setObjectName("card")
-        date_range_layout = QHBoxLayout(self.date_range_container)
-        date_range_layout.setContentsMargins(12, 12, 12, 12)
-        date_range_layout.setSpacing(12)
-        
-        from_label = QLabel("From:")
-        date_range_layout.addWidget(from_label)
-        
+        start_date_layout = QVBoxLayout()
+        start_date_label = QLabel("Start Date:")
         self.start_date_calendar = QCalendarWidget()
         self.start_date_calendar.setGridVisible(True)
-        self.start_date_calendar.setMaximumWidth(300)
-        self.start_date_calendar.setMaximumHeight(250)
-        date_range_layout.addWidget(self.start_date_calendar)
-        
-        to_label = QLabel("To:")
-        date_range_layout.addWidget(to_label)
-        
+        self.start_date_calendar.setVerticalHeaderFormat(
+            QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
+        )
+        start_date_layout.addWidget(start_date_label)
+        start_date_layout.addWidget(self.start_date_calendar)
+
+        end_date_layout = QVBoxLayout()
+        end_date_label = QLabel("End Date:")
         self.end_date_calendar = QCalendarWidget()
         self.end_date_calendar.setGridVisible(True)
-        self.end_date_calendar.setMaximumWidth(300)
-        self.end_date_calendar.setMaximumHeight(250)
-        date_range_layout.addWidget(self.end_date_calendar)
-        
-        apply_button = QPushButton("Apply Range")
-        apply_button.setObjectName("primaryButton")
-        apply_button.clicked.connect(self.apply_custom_date_range)
-        date_range_layout.addWidget(apply_button)
-        
-        self.date_range_container.setVisible(False)
-        layout.addWidget(self.date_range_container)
+        self.end_date_calendar.setVerticalHeaderFormat(
+            QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
+        )
+        end_date_layout.addWidget(end_date_label)
+        end_date_layout.addWidget(self.end_date_calendar)
 
-        # Progress indicator
-        self.progress_container = QFrame()
-        self.progress_container.setObjectName("infoCard")
-        progress_layout = QVBoxLayout(self.progress_container)
-        progress_layout.setContentsMargins(16, 16, 16, 16)
-        progress_layout.setSpacing(8)
+        date_selectors_layout.addLayout(start_date_layout)
+        date_selectors_layout.addLayout(end_date_layout)
+        date_range_frame_layout.addLayout(date_selectors_layout)
 
-        progress_label = QLabel("Analyzing your activities...")
-        progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        progress_layout.addWidget(progress_label)
+        # Apply custom date range button
+        apply_button_layout = QHBoxLayout()
+        apply_button_layout.addStretch()
+        self.apply_date_range_button = QPushButton("Apply Date Range")
+        self.apply_date_range_button.clicked.connect(self.on_apply_date_range)
+        apply_button_layout.addWidget(self.apply_date_range_button)
+        date_range_frame_layout.addLayout(apply_button_layout)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 0)  # Indeterminate progress
-        self.progress_bar.setTextVisible(False)
-        progress_layout.addWidget(self.progress_bar)
+        # Add refresh button and spacing
+        self.refresh_button = QPushButton("Refresh Analysis")
+        self.refresh_button.clicked.connect(lambda: self.update_analysis(force_reload=True))
 
-        self.progress_container.setVisible(False)
-        layout.addWidget(self.progress_container)
+        # Add loading indicator
+        self.loading_label = QLabel("Analysis in progress...")
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.loading_label.setStyleSheet(
+            "color: #4285f4; font-weight: bold; font-size: 14px;"
+        )
+        self.loading_label.setVisible(False)
 
-        # Results container - will hold all the analysis cards
-        self.results_container = QWidget()
-        self.results_layout = QVBoxLayout(self.results_container)
-        self.results_layout.setContentsMargins(0, 0, 0, 0)
-        self.results_layout.setSpacing(20)
-        
-        # Initially hide the results container
-        self.results_container.setVisible(False)
-        layout.addWidget(self.results_container)
-        
-        # Placeholder message when no analysis is available
-        self.placeholder = QLabel("Select a time period and click 'Analyze' to see insights about your activities.")
-        self.placeholder.setObjectName("placeholderText")
-        self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.placeholder.setWordWrap(True)
-        self.placeholder.setMinimumHeight(200)
-        layout.addWidget(self.placeholder)
+        # Add controls to layout
+        controls_layout.addWidget(date_range_label)
+        controls_layout.addWidget(self.date_range_combo)
+        controls_layout.addStretch()
+        controls_layout.addWidget(self.refresh_button)
 
-        # Set the scroll content as the widget for the scroll area
-        scroll_area.setWidget(scroll_content)
-        main_layout.addWidget(scroll_area)
+        # Add controls to main layout
+        main_layout.addLayout(controls_layout)
+        main_layout.addWidget(self.date_range_frame)
+        main_layout.addWidget(self.loading_label)
 
-        # Connect date range change signal
-        self.date_combo.currentIndexChanged.connect(self.on_date_range_changed)
-        
-        # Set default date range
-        today = datetime.now().date()
-        self.start_date_calendar.setSelectedDate(QDate.fromString((today - timedelta(days=7)).strftime("%Y-%m-%d"), "yyyy-MM-dd"))
-        self.end_date_calendar.setSelectedDate(QDate.fromString(today.strftime("%Y-%m-%d"), "yyyy-MM-dd"))
+        # Create stacked widget for content
+        self.content_stack = QStackedWidget()
+
+        # Create placeholder for when no analysis is available
+        self.placeholder_widget = QWidget()
+        placeholder_layout = QVBoxLayout(self.placeholder_widget)
+        placeholder_text = QLabel("Select a date range to analyze your activities.")
+        placeholder_text.setObjectName("placeholderText")
+        placeholder_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_layout.addWidget(placeholder_text)
+        placeholder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Create scroll area for analysis results
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
+        # Create container for analysis results
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setSpacing(20)
+        self.content_layout.setContentsMargins(16, 16, 16, 16)
+        self.scroll_area.setWidget(self.content_widget)
+
+        # Add widgets to stacked widget
+        self.content_stack.addWidget(self.placeholder_widget)
+        self.content_stack.addWidget(self.scroll_area)
+        self.content_stack.setCurrentWidget(self.placeholder_widget)
+
+        # Add stacked widget to main layout
+        main_layout.addWidget(self.content_stack)
+
+        # Initialize with current date
+        self.start_date_calendar.setSelectedDate(QDate.currentDate().addDays(-7))
+        self.end_date_calendar.setSelectedDate(QDate.currentDate())
+
+        # Update analysis
+        self.update_analysis()
 
     def on_date_range_changed(self, index):
         """Handle date range selection change."""
         # Hide date range picker by default
-        self.date_range_container.setVisible(False)
-        
+        self.date_range_frame.setVisible(False)
+
         # If custom range is selected, show the date picker
-        if index == 5:  # Custom Range
-            self.date_range_container.setVisible(True)
+        if index == 6:  # Custom Range
+            self.date_range_frame.setVisible(True)
             # No need to start analysis yet, wait for user to apply the range
         else:
             # For predefined ranges, start analysis immediately
-            self.start_analysis(force_reload=False)
-            
-    def apply_custom_date_range(self):
+            self.update_analysis()
+
+    def on_apply_date_range(self):
         """Apply the custom date range and start analysis."""
         # Start analysis with the selected date range
-        self.start_analysis(force_reload=False)
+        self.update_analysis()
 
-    def start_analysis(self, force_reload=False):
+    def update_analysis(self, force_reload=False):
         """Start the AI analysis process."""
-        # Show progress indicator
-        self.progress_container.setVisible(True)
-        self.analyze_button.setEnabled(False)
+        # Show loading indicator
+        self.loading_label.setVisible(True)
+        self.refresh_button.setEnabled(False)
 
         # Get selected date range
-        period_text = self.date_combo.currentText()
+        period_text = self.date_range_combo.currentText()
 
         # Calculate date range
         end_date = datetime.now()
@@ -328,6 +293,9 @@ class AnalysisWidget(QWidget):
             end_date = datetime(
                 end_of_last_week.year, end_of_last_week.month, end_of_last_week.day, 23, 59, 59
             )
+        elif period_text == "This Month":
+            # Start of current month
+            start_date = datetime(end_date.year, end_date.month, 1)
         elif period_text == "Last Month":
             # Start of last month
             if end_date.month == 1:
@@ -340,11 +308,11 @@ class AnalysisWidget(QWidget):
             # Get dates from calendar widgets
             start_qdate = self.start_date_calendar.selectedDate()
             end_qdate = self.end_date_calendar.selectedDate()
-            
+
             # Convert to Python datetime
             start_date = datetime(start_qdate.year(), start_qdate.month(), start_qdate.day())
             end_date = datetime(end_qdate.year(), end_qdate.month(), end_qdate.day(), 23, 59, 59)
-            
+
             # Validate date range
             if start_date > end_date:
                 self.handle_analysis_error("Start date must be before or equal to end date.")
@@ -360,24 +328,22 @@ class AnalysisWidget(QWidget):
             day_start = datetime(
                 current_date.year, current_date.month, current_date.day
             )
-            day_activities = self.db.get_activities_for_day(day_start)
+            day_activities = self.activities_db.get_activities_for_day(day_start)
             activities.extend(day_activities)
             current_date += timedelta(days=1)
 
-        self.current_activities = activities
-
         # Get daily notes for the date range
         notes_dict = {}
-        if hasattr(self.db, "get_notes_for_date_range"):
+        if hasattr(self.activities_db, "get_notes_for_date_range"):
             try:
-                notes_dict = self.db.get_notes_for_date_range(start_date, end_date)
+                notes_dict = self.activities_db.get_notes_for_date_range(start_date, end_date)
                 print(f"Retrieved {len(notes_dict)} daily notes for analysis")
             except Exception as e:
                 print(f"Error retrieving daily notes: {e}")
 
         # Set API type based on selection
         api_type = (
-            "ollama" if self.api_combo.currentText() == "Ollama (Local)" else "openai"
+            "ollama" if self.analyzer.api_type == "ollama" else "openai"
         )
 
         # Store current date range
@@ -389,46 +355,43 @@ class AnalysisWidget(QWidget):
         )
         self.worker.analysis_complete.connect(self.update_analysis_results)
         self.worker.analysis_error.connect(self.handle_analysis_error)
-        self.worker.finished.connect(lambda: self.analyze_button.setEnabled(True))
-        self.worker.finished.connect(lambda: self.progress_container.setVisible(False))
+        self.worker.finished.connect(lambda: self.refresh_button.setEnabled(True))
+        self.worker.finished.connect(lambda: self.loading_label.setVisible(False))
         self.worker.start()
-
-    def force_reload_analysis(self):
-        """Force a reload of the analysis, ignoring any cached results."""
-        self.start_analysis(force_reload=True)
 
     def update_analysis_results(self, results):
         """Update the UI with analysis results."""
-        # Hide progress
-        self.progress_container.setVisible(False)
-        self.analyze_button.setEnabled(True)
+        # Hide loading indicator
+        self.loading_label.setVisible(False)
+        self.refresh_button.setEnabled(True)
 
         # Store current analysis
         self.current_analysis = results
-        
+
         # Hide placeholder and show results container
-        self.placeholder.setVisible(False)
-        
+        self.content_stack.setCurrentWidget(self.scroll_area)
+
         # Clear previous results
         self.clear_results_container()
-        self.results_container.setVisible(True)
-        
-        # Create cards for each section of the analysis
-        self.create_summary_card(results)
-        self.create_patterns_card(results)
-        self.create_insights_card(results)
-        self.create_recommendations_card(results)
-        self.create_productivity_card(results)
-        
+
+        # Create a top row with productivity score and summary
+        self.create_top_row(results)
+
+        # Create a row with patterns and insights
+        self.create_middle_row(results)
+
+        # Create a row with recommendations
+        self.create_recommendations_row(results)
+
     def clear_results_container(self):
         """Clear all widgets from the results container."""
         # Remove all widgets from the results layout
-        while self.results_layout.count():
-            item = self.results_layout.takeAt(0)
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-                
+
     def create_card(self, title, content_widget):
         """Create a card with a title and content widget."""
         card = QFrame()
@@ -436,135 +399,234 @@ class AnalysisWidget(QWidget):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(12)
-        
+
         # Add title
         title_label = QLabel(title)
         title_label.setObjectName("sectionTitle")
         card_layout.addWidget(title_label)
-        
+
         # Add content
         card_layout.addWidget(content_widget)
-        
-        # Add to results layout
-        self.results_layout.addWidget(card)
-        
+
         return card
-        
-    def create_summary_card(self, results):
-        """Create the summary card."""
-        if "summary" not in results or not results["summary"]:
-            return
-            
-        summary_text = QTextEdit()
-        summary_text.setReadOnly(True)
-        summary_text.setMinimumHeight(100)
-        
-        # Format the summary text with HTML
-        try:
-            summary_text.setHtml(results["summary"])
-        except (ValueError, TypeError):
-            summary_text.setPlainText(results["summary"])
-            
-        self.create_card("Activity Summary", summary_text)
-        
-    def create_patterns_card(self, results):
-        """Create the patterns card."""
-        if "patterns" not in results or not results["patterns"]:
-            return
-            
-        patterns_text = QTextEdit()
-        patterns_text.setReadOnly(True)
-        patterns_text.setMinimumHeight(120)
-        
-        # Format the patterns as a bulleted list
-        patterns_html = "<ul>"
-        for pattern in results["patterns"]:
-            patterns_html += f"<li>{pattern}</li>"
-        patterns_html += "</ul>"
-        
-        patterns_text.setHtml(patterns_html)
-        self.create_card("Activity Patterns", patterns_text)
-        
-    def create_insights_card(self, results):
-        """Create the insights card."""
-        if "insights" not in results or not results["insights"]:
-            return
-            
-        insights_text = QTextEdit()
-        insights_text.setReadOnly(True)
-        insights_text.setMinimumHeight(150)
-        
-        # Format the insights as a bulleted list
-        insights_html = "<ul>"
-        for insight in results["insights"]:
-            insights_html += f"<li>{insight}</li>"
-        insights_html += "</ul>"
-        
-        insights_text.setHtml(insights_html)
-        self.create_card("Key Insights", insights_text)
-        
-    def create_recommendations_card(self, results):
-        """Create the recommendations card."""
+
+    def create_top_row(self, results):
+        """Create the top row with productivity score and summary."""
+        # Create a horizontal layout for the top row
+        top_row = QWidget()
+        top_layout = QHBoxLayout(top_row)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(20)
+
+        # Create productivity score widget (left side)
+        if "productivity_score" in results:
+            try:
+                score = float(results["productivity_score"])
+                score_widget = self.create_productivity_score_widget(score, results.get("productivity_explanation", ""))
+                top_layout.addWidget(score_widget, 1)  # 1:2 ratio
+            except (ValueError, TypeError):
+                # Skip if score is not a valid number
+                pass
+
+        # Create summary widget (right side)
+        if "summary" in results and results["summary"]:
+            summary_text = QTextEdit()
+            summary_text.setReadOnly(True)
+            summary_text.setMinimumHeight(180)
+
+            # Format the summary text with HTML
+            try:
+                summary_text.setHtml(results["summary"])
+            except (ValueError, TypeError):
+                summary_text.setPlainText(results["summary"])
+
+            summary_card = self.create_card("Activity Summary", summary_text)
+            top_layout.addWidget(summary_card, 2)  # 1:2 ratio
+
+        # Add the top row to the results layout
+        self.content_layout.addWidget(top_row)
+
+    def create_middle_row(self, results):
+        """Create the middle row with patterns and insights."""
+        # Create a horizontal layout for the middle row
+        middle_row = QWidget()
+        middle_layout = QHBoxLayout(middle_row)
+        middle_layout.setContentsMargins(0, 0, 0, 0)
+        middle_layout.setSpacing(20)
+
+        # Create patterns widget (left side)
+        if "patterns" in results and results["patterns"]:
+            patterns_text = QTextEdit()
+            patterns_text.setReadOnly(True)
+            patterns_text.setMinimumHeight(150)
+
+            # Format the patterns as a bulleted list
+            patterns_html = "<ul>"
+            for pattern in results["patterns"]:
+                patterns_html += f"<li>{pattern}</li>"
+            patterns_html += "</ul"
+
+            patterns_text.setHtml(patterns_html)
+            patterns_card = self.create_card("Activity Patterns", patterns_text)
+            middle_layout.addWidget(patterns_card)
+
+        # Create insights widget (right side)
+        if "insights" in results and results["insights"]:
+            insights_text = QTextEdit()
+            insights_text.setReadOnly(True)
+            insights_text.setMinimumHeight(150)
+
+            # Format the insights as a bulleted list
+            insights_html = "<ul>"
+            for insight in results["insights"]:
+                insights_html += f"<li>{insight}</li>"
+            insights_html += "</ul"
+
+            insights_text.setHtml(insights_html)
+            insights_card = self.create_card("Key Insights", insights_text)
+            middle_layout.addWidget(insights_card)
+
+        # Add the middle row to the results layout
+        self.content_layout.addWidget(middle_row)
+
+    def create_recommendations_row(self, results):
+        """Create the recommendations row."""
         if "recommendations" not in results or not results["recommendations"]:
             return
-            
+
         recommendations_text = QTextEdit()
         recommendations_text.setReadOnly(True)
         recommendations_text.setMinimumHeight(150)
-        
+
         # Format the recommendations as a bulleted list
         recommendations_html = "<ul>"
         for recommendation in results["recommendations"]:
             recommendations_html += f"<li>{recommendation}</li>"
-        recommendations_html += "</ul>"
-        
+        recommendations_html += "</ul"
+
         recommendations_text.setHtml(recommendations_html)
-        self.create_card("Recommendations", recommendations_text)
-        
-    def create_productivity_card(self, results):
-        """Create the productivity score card if available."""
-        if "productivity_score" not in results:
-            return
-            
+        recommendations_card = self.create_card("Recommendations", recommendations_text)
+
+        # Add the recommendations card to the results layout
+        self.content_layout.addWidget(recommendations_card)
+
+    def create_productivity_score_widget(self, score, explanation):
+        """Create a circular productivity score widget."""
+        # Create a frame for the productivity score
+        score_frame = QFrame()
+        score_frame.setObjectName("card")
+        score_layout = QVBoxLayout(score_frame)
+        score_layout.setContentsMargins(16, 16, 16, 16)
+        score_layout.setSpacing(12)
+
+        # Add title
+        title_label = QLabel("Productivity Score")
+        title_label.setObjectName("sectionTitle")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        score_layout.addWidget(title_label)
+
+        # Create circular progress indicator
+        class CircularProgressIndicator(QGraphicsView):
+            def __init__(self, score, parent=None):
+                super().__init__(parent)
+                self.score = min(max(float(score), 0), 10)  # Clamp between 0 and 10
+                self.setMinimumSize(180, 180)
+                self.setMaximumSize(180, 180)
+                self.setRenderHint(QPainter.RenderHint.Antialiasing)
+                self.setFrameShape(QFrame.Shape.NoFrame)
+                self.setBackgroundBrush(QBrush(QColor("#ffffff")))
+
+                # Create scene
+                self.scene = QGraphicsScene(self)
+                self.setScene(self.scene)
+
+                # Draw the progress indicator
+                self.draw_progress()
+
+            def draw_progress(self):
+                self.scene.clear()
+
+                # Calculate percentage
+                percentage = self.score / 10.0
+
+                # Define colors based on score
+                if self.score >= 8:
+                    color = QColor("#34a853")  # Green for high scores
+                elif self.score >= 6:
+                    color = QColor("#4285f4")  # Blue for medium-high scores
+                elif self.score >= 4:
+                    color = QColor("#fbbc04")  # Yellow for medium scores
+                else:
+                    color = QColor("#ea4335")  # Red for low scores
+
+                # Draw background circle
+                background_pen = QPen(QColor("#e0e0e0"), 10)
+                background_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                self.scene.addEllipse(20, 20, 140, 140, background_pen, QBrush(Qt.BrushStyle.NoBrush))
+
+                # Draw progress arc using path
+                progress_pen = QPen(color, 10)
+                progress_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+                if percentage > 0:  # Only draw arc if score is greater than 0
+                    # Calculate start and span angles (in degrees)
+                    start_angle = 90  # Start at top (90 degrees)
+                    span_angle = percentage * 360  # Clockwise
+
+                    # Create arc path
+                    path = QPainterPath()
+
+                    # Draw the arc
+                    rect = QRectF(20, 20, 140, 140)
+
+                    # Start at the top of the circle
+                    path.moveTo(90, 20)
+
+                    # Draw the arc clockwise
+                    path.arcTo(rect, start_angle, -span_angle)
+
+                    self.scene.addPath(path, progress_pen)
+
+                # Add score text
+                score_text = self.scene.addText(f"{self.score:.1f}", QFont("Arial", 24, QFont.Weight.Bold))
+                score_text.setDefaultTextColor(color)
+
+                # Center the text
+                text_rect = score_text.boundingRect()
+                score_text.setPos(90 - text_rect.width() / 2, 70 - text_rect.height() / 2)
+
+                # Add "out of 10" text
+                out_of_text = self.scene.addText("out of 10", QFont("Arial", 10))
+                out_of_text.setDefaultTextColor(QColor("#5f6368"))
+
+                # Center the "out of 10" text
+                out_rect = out_of_text.boundingRect()
+                out_of_text.setPos(90 - out_rect.width() / 2, 100 - out_rect.height() / 2)
+
+        # Create the circular progress indicator with a default score if none is provided
         try:
-            score = float(results["productivity_score"])
-            
-            # Create a frame for the productivity score
-            score_frame = QFrame()
-            score_layout = QVBoxLayout(score_frame)
-            score_layout.setContentsMargins(0, 0, 0, 0)
-            score_layout.setSpacing(8)
-            
-            # Add score label
-            score_label = QLabel(f"Productivity Score: {score:.1f}/10")
-            score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            score_label.setObjectName("scoreLabel")
-            score_layout.addWidget(score_label)
-            
-            # Add progress bar for visual representation
-            score_bar = QProgressBar()
-            score_bar.setRange(0, 100)
-            score_bar.setValue(int(score * 10))
-            score_bar.setTextVisible(False)
-            score_layout.addWidget(score_bar)
-            
-            # Add explanation if available
-            if "productivity_explanation" in results and results["productivity_explanation"]:
-                explanation = QLabel(results["productivity_explanation"])
-                explanation.setWordWrap(True)
-                explanation.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                score_layout.addWidget(explanation)
-                
-            self.create_card("Productivity Score", score_frame)
+            score_value = float(score) if score is not None else 0.0
         except (ValueError, TypeError):
-            # Skip if score is not a valid number
-            pass
+            score_value = 0.0
+
+        circular_progress = CircularProgressIndicator(score_value)
+        score_layout.addWidget(circular_progress, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Add explanation if available
+        if explanation:
+            explanation_label = QLabel(explanation)
+            explanation_label.setWordWrap(True)
+            explanation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            explanation_label.setObjectName("explanationText")
+            score_layout.addWidget(explanation_label)
+
+        return score_frame
 
     def handle_analysis_error(self, error_message):
         """Handle errors during analysis."""
-        # Hide progress
-        self.progress_container.setVisible(False)
-        self.analyze_button.setEnabled(True)
+        # Hide loading indicator
+        self.loading_label.setVisible(False)
+        self.refresh_button.setEnabled(True)
 
         # Show error message
         QMessageBox.critical(
@@ -592,13 +654,13 @@ class AnalysisWidget(QWidget):
             success = False
 
             # Use the database's export methods if available
-            if hasattr(self.db, "export_activities_to_json") and hasattr(
-                self.db, "export_activities_to_text"
+            if hasattr(self.activities_db, "export_activities_to_json") and hasattr(
+                self.activities_db, "export_activities_to_text"
             ):
                 if file_path.lower().endswith(".json"):
-                    success = self.db.export_activities_to_json(file_path)
+                    success = self.activities_db.export_activities_to_json(file_path)
                 else:
-                    success = self.db.export_activities_to_text(file_path)
+                    success = self.activities_db.export_activities_to_text(file_path)
             else:
                 # Fallback to our own implementation
                 # Get all activities from the database
@@ -619,7 +681,7 @@ class AnalysisWidget(QWidget):
                         day_start = datetime(
                             current_date.year, current_date.month, current_date.day
                         )
-                        day_activities = self.db.get_activities_for_day(day_start)
+                        day_activities = self.activities_db.get_activities_for_day(day_start)
                         all_activities.extend(day_activities)
                         current_date += timedelta(days=1)
 

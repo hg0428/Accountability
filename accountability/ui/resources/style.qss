@@ -77,6 +77,33 @@ QLabel#subtitle {
     margin: 8px 0;
 }
 
+#explanationText {
+    color: #5f6368;
+    font-size: 13px;
+    margin-top: 8px;
+    line-height: 1.4;
+}
+
+/* Circular progress styles */
+QGraphicsView {
+    background: transparent;
+    border: none;
+}
+
+/* Text edit styles for analysis cards */
+QTextEdit {
+    border: none;
+    background-color: transparent;
+    padding: 4px;
+    color: #202124;
+    line-height: 1.5;
+}
+
+QTextEdit:focus {
+    border: none;
+    outline: none;
+}
+
 /* Buttons */
 QPushButton {
     background-color: #f8f9fa;
