@@ -269,7 +269,7 @@ class Database:
     
     def export_activities_to_json(self, file_path):
         """
-        Export all activities to a JSON file.
+        Export all activities and daily notes to a JSON file.
         
         Args:
             file_path: Path to save the JSON file
@@ -293,11 +293,27 @@ class Database:
                     "recorded_at": activity["timestamp"].isoformat()
                 })
             
+            # Get all dates from activities
+            all_dates = set(activity["hour"].strftime("%Y-%m-%d") for activity in activities)
+            
+            # Get all daily notes
+            daily_notes = []
+            for date_str in all_dates:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                note = self.get_daily_note(date_obj)
+                if note:  # Only include non-empty notes
+                    daily_notes.append({
+                        "date": date_str,
+                        "notes": note
+                    })
+            
             # Prepare export data
             export_data = {
                 "export_date": datetime.now().isoformat(),
                 "total_activities": len(formatted_activities),
-                "activities": formatted_activities
+                "total_notes": len(daily_notes),
+                "activities": formatted_activities,
+                "daily_notes": daily_notes
             }
             
             # Write to file
@@ -311,7 +327,7 @@ class Database:
     
     def export_activities_to_text(self, file_path):
         """
-        Export all activities to a text file.
+        Export all activities and daily notes to a text file.
         
         Args:
             file_path: Path to save the text file
@@ -330,11 +346,20 @@ class Database:
                     activities_by_date[date_str] = []
                 activities_by_date[date_str].append(activity)
             
+            # Get all daily notes for the dates
+            notes_by_date = {}
+            for date_str in activities_by_date.keys():
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                note = self.get_daily_note(date_obj)
+                if note:  # Only include non-empty notes
+                    notes_by_date[date_str] = note
+            
             # Write to file
             with open(file_path, 'w') as f:
                 f.write("Accountability App - Activity Export\n")
                 f.write(f"Exported on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Total activities: {len(activities)}\n\n")
+                f.write(f"Total activities: {len(activities)}\n")
+                f.write(f"Total daily notes: {len(notes_by_date)}\n\n")
                 
                 for date_str, day_activities in sorted(activities_by_date.items()):
                     f.write(f"=== {date_str} ===\n")
@@ -346,8 +371,13 @@ class Database:
                         time_str = activity["hour"].strftime("%H:%M")
                         f.write(f"{time_str}: {activity['activity']}\n")
                     
+                    # Add daily note if it exists
+                    if date_str in notes_by_date:
+                        f.write("\nDAILY NOTE:\n")
+                        f.write(f"{notes_by_date[date_str]}\n")
+                    
                     f.write("\n")
-                
+            
             return True
         except Exception as e:
             print(f"Error exporting activities: {e}")
