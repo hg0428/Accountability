@@ -5,7 +5,7 @@ Main Application Module for Accountability App.
 import sys
 import os
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QMessageBox, QLabel, QApplication
-from PyQt6.QtGui import QIcon, QColor, QPixmap
+from PyQt6.QtGui import QIcon, QColor, QPixmap, QAction
 from PyQt6.QtCore import QTimer, Qt, QDateTime, QTime
 
 from accountability.scheduler import ActivityScheduler
@@ -17,8 +17,11 @@ from accountability.ui.reminder import ReminderDialog
 class AccountabilityApp:
     """Main application class for Accountability app."""
 
-    def __init__(self):
+    def __init__(self, app=None):
         """Initialize the application components."""
+        # Store the QApplication instance
+        self.app = app
+
         # Initialize database connection
         self.db = Database()
         self.db.initialize()
@@ -100,7 +103,7 @@ class AccountabilityApp:
 
         # If we have missed hours and either force is True or it's a new hour, show the reminder
         if missed_hours and (force or self.is_new_hour()):
-            self.show_reminder(missed_hours)
+            self.show_reminder_for_hours(missed_hours)
 
     def is_new_hour(self):
         """Check if we've entered a new hour since the last check."""
@@ -110,7 +113,7 @@ class AccountabilityApp:
         # Consider it a new hour if we're within the first 5 minutes of the hour
         return current_minute < 5
 
-    def show_reminder(self, hours):
+    def show_reminder_for_hours(self, hours):
         """Show the reminder dialog for the specified hours."""
         self.reminder_showing = True
         dialog = ReminderDialog(hours, self.db, self.scheduler)
@@ -168,74 +171,88 @@ class AccountabilityApp:
 
     def setup_tray_icon(self):
         """Set up the system tray icon and menu."""
-        # Check if system tray is available
         if not QSystemTrayIcon.isSystemTrayAvailable():
-            QMessageBox.warning(
-                None, "System Tray", "System tray is not available on this system."
-            )
+            print("System tray not available")
             return
 
         # Create tray icon with the custom logo
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                               "ui", "resources", "logo.png")
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "ui", "resources", "logo.png"
+        )
         print(f"Loading tray icon from: {icon_path}")
-        
+
         # Create a QPixmap from the image file first
         pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
-            # Create a smaller version for the tray icon if needed
+            # Scale down if needed
             if pixmap.width() > 64 or pixmap.height() > 64:
-                pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, 
-                                     Qt.TransformationMode.SmoothTransformation)
-            
+                pixmap = pixmap.scaled(
+                    64,
+                    64,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+
             icon = QIcon(pixmap)
-            print(f"Tray icon loaded successfully, size: {pixmap.width()}x{pixmap.height()}")
+            print(
+                f"Tray icon loaded successfully, size: {pixmap.width()}x{pixmap.height()}"
+            )
         else:
             print("Failed to load tray icon, using fallback")
             icon = QIcon.fromTheme("appointment-soon")
-            if icon.isNull():
-                icon = QIcon.fromTheme("accessories-calculator")
-                if icon.isNull():
-                    icon = QIcon.fromTheme("dialog-information")
 
-        self.tray_icon = QSystemTrayIcon()
-        self.tray_icon.setIcon(icon)
-        self.tray_icon.setToolTip("Accountability App")
+        # Create the tray icon with the application as parent
+        self.tray_icon = QSystemTrayIcon(icon, self.app)
+        self.tray_icon.setToolTip("Accountability")
 
-        # Create tray menu
-        tray_menu = QMenu()
+        # Create menu without parent, but store as instance variable
+        self.tray_menu = QMenu()
 
-        open_action = tray_menu.addAction("Open")
-        open_action.triggered.connect(self.main_window.show)
+        # Create actions parented to the menu
+        self.open_action = QAction("Open", self.tray_menu)
+        self.open_action.triggered.connect(self.show_main_window)
 
-        history_action = tray_menu.addAction("View History")
-        history_action.triggered.connect(self.main_window.show_history)
+        self.record_action = QAction("Record Activity", self.tray_menu)
+        self.record_action.triggered.connect(self.show_reminder)
 
-        check_now_action = tray_menu.addAction("Check Missed Hours")
-        check_now_action.triggered.connect(lambda: self.check_schedule(force=True))
+        self.quit_action = QAction("Quit", self.tray_menu)
+        self.quit_action.triggered.connect(self.quit)
 
-        tray_menu.addSeparator()
+        # Add actions to menu
+        self.tray_menu.addAction(self.open_action)
+        self.tray_menu.addAction(self.record_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.quit_action)
 
-        quit_action = tray_menu.addAction("Quit")
-        quit_action.triggered.connect(self.quit)
+        # Set menu to tray icon
+        self.tray_icon.setContextMenu(self.tray_menu)
 
-        # Set the menu and show the icon
-        self.tray_icon.setContextMenu(tray_menu)
+        # Show the tray icon
         self.tray_icon.show()
 
-        # Connect the activated signal to handle tray icon clicks
-        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+        # We don't want the main window to show on tray icon click
+        # but we'll keep this method available for future use
+        # self.tray_icon.activated.connect(self.on_tray_icon_activated)
 
     def on_tray_icon_activated(self, reason):
         """Handle tray icon activation."""
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            # Single click - show/hide main window
-            if self.main_window.isVisible():
-                self.main_window.hide()
-            else:
-                self.main_window.show()
-                self.main_window.raise_()
-                self.main_window.activateWindow()
+        # Disabled for now - uncomment if you want the tray icon to do something on click
+        # if reason == QSystemTrayIcon.ActivationReason.Trigger:
+        #     self.show_main_window()
+        pass
+
+    def show_main_window(self):
+        """Show and activate the main window."""
+        if not self.main_window.isVisible():
+            self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+
+    def show_reminder(self):
+        """Show the activity reminder dialog for the current hour."""
+        current_hour = QDateTime.currentDateTime().toPyDateTime()
+        hours = [current_hour]
+        self.show_reminder_for_hours(hours)
 
     def quit(self):
         """Quit the application cleanly."""

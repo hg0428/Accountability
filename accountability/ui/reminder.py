@@ -157,9 +157,7 @@ class ReminderDialog(QDialog):
         for hour in sorted(self.hours):
             # Format the hour range (e.g., "9:00 AM - 10:00 AM")
             start_time = hour.strftime("%I:%M %p").lstrip("0")
-            end_time = (
-                (hour.replace(hour=hour.hour + 1)).strftime("%I:%M %p").lstrip("0")
-            )
+            end_time = (hour + timedelta(hours=1)).strftime("%I:%M %p").lstrip("0")
             item_text = f"{start_time} - {end_time}"
 
             # Create and add the item

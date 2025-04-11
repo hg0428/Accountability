@@ -296,6 +296,11 @@ class MainWindow(QMainWindow):
         # Add tab widget to main layout
         main_layout.addWidget(self.tab_widget)
 
+    def closeEvent(self, event):
+        """Override the close event to hide the window instead of closing."""
+        event.ignore()  # Prevent the window from actually closing
+        self.hide()     # Hide the window
+
     def load_stylesheet(self):
         """Load the application stylesheet."""
         try:

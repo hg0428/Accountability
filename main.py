@@ -16,12 +16,13 @@ def main():
     # Set the application to be a menu bar only app (no dock icon)
     if sys.platform == 'darwin':
         # This must be set before creating QApplication
-        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_PluginApplication, True)
+        # QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_PluginApplication, True) # Might interfere with background behavior
         os.environ['LSUIElement'] = '1'  # Hide from dock on macOS
         
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)  # Keep app running when window is closed
     app.setApplicationName("Accountability")
-    app.setQuitOnLastWindowClosed(False)  # Allow running in background
+    app.setOrganizationName("YourOrganization")
     
     # Set application icon
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
@@ -30,8 +31,8 @@ def main():
         app_icon = QIcon(icon_path)
         app.setWindowIcon(app_icon)
     
-    # Initialize the main application
-    accountability_app = AccountabilityApp()
+    # Initialize the main application and pass the QApplication instance
+    accountability_app = AccountabilityApp(app)
     accountability_app.start()
     
     # Start the event loop
