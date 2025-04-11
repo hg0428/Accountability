@@ -72,15 +72,15 @@ class ReminderDialog(QDialog):
     def init_ui(self):
         """Set up the user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # Create a card-like container
         card = QFrame()
         card.setObjectName("card")
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 20, 20, 20)
-        card_layout.setSpacing(15)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(12)
 
         # Title and explanation
         title = QLabel("What were you doing?")
@@ -99,24 +99,32 @@ class ReminderDialog(QDialog):
         card_layout.addWidget(subtitle)
 
         # List of hours
+        hours_container = QFrame()
+        hours_container.setObjectName("infoCard")
+        hours_layout = QVBoxLayout(hours_container)
+        hours_layout.setContentsMargins(12, 12, 12, 12)
+        hours_layout.setSpacing(8)
+        
         hours_label = QLabel("Select hours:")
         hours_label.setObjectName("sectionTitle")
-        card_layout.addWidget(hours_label)
+        hours_layout.addWidget(hours_label)
 
         self.hour_list = QListWidget()
         self.hour_list.setAlternatingRowColors(True)
         self.hour_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
-        self.hour_list.setMaximumHeight(150)
+        self.hour_list.setMaximumHeight(180)
         self.populate_hour_list()
-        card_layout.addWidget(self.hour_list)
+        hours_layout.addWidget(self.hour_list)
 
         # Info label
         info_label = QLabel(
             "You can select multiple hours and enter the same activity for all of them."
         )
         info_label.setObjectName("subtitle")
-        info_label.setStyleSheet("font-style: italic; color: #7f8c8d;")
-        card_layout.addWidget(info_label)
+        info_label.setStyleSheet("font-style: italic; color: #5f6368;")
+        hours_layout.addWidget(info_label)
+        
+        card_layout.addWidget(hours_container)
 
         # Activity input
         input_label = QLabel("Activity Description:")
@@ -125,14 +133,29 @@ class ReminderDialog(QDialog):
 
         self.activity_input = QTextEdit()
         self.activity_input.setPlaceholderText("What were you doing during this time?")
-        self.activity_input.setMinimumHeight(100)
+        self.activity_input.setMinimumHeight(120)
         card_layout.addWidget(self.activity_input)
+
+        # Quick suggestions
+        suggestions_container = QFrame()
+        suggestions_layout = QHBoxLayout(suggestions_container)
+        suggestions_layout.setContentsMargins(0, 0, 0, 0)
+        suggestions_layout.setSpacing(8)
+        
+        suggestions = ["Working", "Meeting", "Break", "Learning"]
+        for suggestion in suggestions:
+            btn = QPushButton(suggestion)
+            btn.setObjectName("secondaryButton")
+            btn.clicked.connect(lambda checked, text=suggestion: self.activity_input.setText(text))
+            suggestions_layout.addWidget(btn)
+            
+        card_layout.addLayout(suggestions_layout)
 
         # Buttons
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(12)
 
-        self.snooze_button = QPushButton("Snooze (10 minutes)")
+        self.snooze_button = QPushButton("Snooze (10 min)")
         self.snooze_button.setObjectName("secondaryButton")
         self.snooze_button.setIcon(QIcon.fromTheme("appointment-soon"))
         self.snooze_button.clicked.connect(self.on_snooze)
@@ -167,9 +190,12 @@ class ReminderDialog(QDialog):
             # Style the item
             now = datetime.now()
             if hour + timedelta(hours=1) < now:
-                # Past hours
-                item.setForeground(QColor("#e74c3c"))  # Red for missed hours
+                # Past hours (missed)
+                item.setForeground(QColor("#ea4335"))  # Red for missed hours
                 item.setData(Qt.ItemDataRole.UserRole + 1, "missed")
+                item.setText(f"⚠️ {item_text} (missed)")
+            else:
+                item.setText(f"🕒 {item_text}")
 
             self.hour_list.addItem(item)
 

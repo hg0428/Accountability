@@ -1,0 +1,11 @@
+*.pyc
+__pycache__/*
+/*.pyc
+/accountability/*.pyc
+/accountability/ui/*.pyc
+/accountability/__pycache__/*
+/accountability/ui/__pycache__/*
+/accountability/__pycache__/*.pyc
+/accountability/ui/__pycache__
+/accountability/__pycache__
+
