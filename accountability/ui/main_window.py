@@ -4,30 +4,39 @@ Provides the primary interface for viewing activity history.
 """
 
 from datetime import datetime, timedelta
+import json
+import os
+import traceback
+from typing import List, Dict, Any, Optional, Set, Tuple, Union
+
 from PyQt6.QtWidgets import (
     QMainWindow,
-    QTabWidget,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
-    QListWidget,
-    QListWidgetItem,
     QTextEdit,
+    QPushButton,
+    QApplication,
+    QMessageBox,
+    QSizePolicy,
+    QSpacerItem,
     QCalendarWidget,
     QComboBox,
+    QListWidget,
+    QListWidgetItem,
+    QTabWidget,
     QFrame,
-    QAbstractItemView,
-    QMessageBox,
-    QGridLayout,
-    QDialogButtonBox,
     QDialog,
     QScrollArea,
     QGroupBox,
+    QAbstractItemView,
+    QGridLayout,
+    QDialogButtonBox,
 )
-from PyQt6.QtCore import QTime, Qt, QDate, pyqtSlot, QSize
+from PyQt6.QtCore import QTime, Qt, QDate, pyqtSlot, QSize, QEvent
 from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap
+
 
 from accountability.utils.time_utils import format_hour_range
 from .reminder import ReminderDialog
@@ -224,6 +233,8 @@ class DailySummaryWidget(QWidget):
         self.activity_list = QListWidget()
         self.activity_list.setAlternatingRowColors(True)
         self.activity_list.setMaximumHeight(300)
+        self.activity_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.activity_list.installEventFilter(self)
         activities_layout.addWidget(self.activity_list)
 
         content_layout.addWidget(activities_frame)
@@ -372,6 +383,48 @@ class DailySummaryWidget(QWidget):
                 item.setForeground(QColor("#9aa0a6"))  # Gray color for empty slots
 
             self.activity_list.addItem(item)
+
+    def eventFilter(self, watched, event):
+        """Custom event filter to handle selection behavior in the activity list."""
+        if watched is self.activity_list and event.type() == QEvent.Type.MouseButtonPress:
+            modifiers = QApplication.keyboardModifiers()
+            index = self.activity_list.indexAt(event.pos())
+            
+            # If the click didn't hit an item, pass to default handler
+            if not index.isValid():
+                return super().eventFilter(watched, event)
+                
+            if modifiers == Qt.KeyboardModifier.NoModifier:
+                # Regular click - select only this item
+                for i in range(self.activity_list.count()):
+                    self.activity_list.item(i).setSelected(i == index.row())
+                return True
+                
+            elif modifiers & Qt.KeyboardModifier.ShiftModifier:
+                # Shift+click - select range from last selected to this one
+                selected_items = self.activity_list.selectedItems()
+                if selected_items:
+                    # Find the first selected item's row
+                    first_selected_row = self.activity_list.row(selected_items[0])
+                    # Select all items between the first selected and the clicked one
+                    start_row = min(first_selected_row, index.row())
+                    end_row = max(first_selected_row, index.row())
+                    
+                    # Clear current selection
+                    self.activity_list.clearSelection()
+                    
+                    # Select the range
+                    for i in range(start_row, end_row + 1):
+                        self.activity_list.item(i).setSelected(True)
+                    return True
+                    
+            elif modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
+                # Ctrl/Cmd+click - toggle this item's selection without affecting others
+                item = self.activity_list.item(index.row())
+                item.setSelected(not item.isSelected())
+                return True
+                
+        return super().eventFilter(watched, event)
 
 
 class MainWindow(QMainWindow):
@@ -528,10 +581,11 @@ class MainWindow(QMainWindow):
         self.activity_list = QListWidget()
         self.activity_list.setAlternatingRowColors(True)
         self.activity_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.MultiSelection
+            QAbstractItemView.SelectionMode.ExtendedSelection
         )
         self.activity_list.itemDoubleClicked.connect(self.on_item_double_clicked)
         self.activity_list.setMinimumHeight(300)  # Set minimum height
+        self.activity_list.installEventFilter(self)  # Add event filter for custom selection
         activities_layout.addWidget(self.activity_list)
 
         right_layout.addWidget(activities_frame)
@@ -948,3 +1002,45 @@ class MainWindow(QMainWindow):
                 "There was an error saving your notes. Please try again.",
                 QMessageBox.StandardButton.Ok,
             )
+
+    def eventFilter(self, watched, event):
+        """Custom event filter to handle selection behavior in the activity list."""
+        if watched is self.activity_list and event.type() == QEvent.Type.MouseButtonPress:
+            modifiers = QApplication.keyboardModifiers()
+            index = self.activity_list.indexAt(event.pos())
+            
+            # If the click didn't hit an item, pass to default handler
+            if not index.isValid():
+                return super().eventFilter(watched, event)
+                
+            if modifiers == Qt.KeyboardModifier.NoModifier:
+                # Regular click - select only this item
+                for i in range(self.activity_list.count()):
+                    self.activity_list.item(i).setSelected(i == index.row())
+                return True
+                
+            elif modifiers & Qt.KeyboardModifier.ShiftModifier:
+                # Shift+click - select range from last selected to this one
+                selected_items = self.activity_list.selectedItems()
+                if selected_items:
+                    # Find the first selected item's row
+                    first_selected_row = self.activity_list.row(selected_items[0])
+                    # Select all items between the first selected and the clicked one
+                    start_row = min(first_selected_row, index.row())
+                    end_row = max(first_selected_row, index.row())
+                    
+                    # Clear current selection
+                    self.activity_list.clearSelection()
+                    
+                    # Select the range
+                    for i in range(start_row, end_row + 1):
+                        self.activity_list.item(i).setSelected(True)
+                    return True
+                    
+            elif modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
+                # Ctrl/Cmd+click - toggle this item's selection without affecting others
+                item = self.activity_list.item(index.row())
+                item.setSelected(not item.isSelected())
+                return True
+                
+        return super().eventFilter(watched, event)
